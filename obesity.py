@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 
-# Lecture des données
 data = pd.read_csv("obesity_donnee.csv")
 
 data['NObeyesdad'] = data['NObeyesdad'].apply(lambda x: 1 if str(x).lower() in ['obese', '1'] else 0)
@@ -10,33 +9,71 @@ features = data.columns.drop('NObeyesdad')
 X = data[features].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(float)
 y = data['NObeyesdad'].values.astype(int)
 
-# des poids et du biais
-w = np.zeros(len(features))
-b = 0
-learn_rate = 0.01
-epochs = 30
+X_min = X.min(axis=0)
+X_max = X.max(axis=0)
+X_norm = (X - X_min) / (X_max - X_min + 1e-8)  
+
+input_size = X.shape[1]
+hidden_size = 5 
+output_size = 1
+learning_rate = 0.05
+epochs = 20
+
+# Initialisation des poids et biais
+np.random.seed(42)
+W1 = np.random.randn(hidden_size, input_size) * 0.01
+b1 = np.zeros((hidden_size, 1))
+W2 = np.random.randn(output_size, hidden_size) * 0.01
+b2 = np.zeros((output_size, 1))
 
 # Fonction d'activation
-def activation(s):
-    if s >= 0 :
-        return 1  
-    else :
-        return 0
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
-# Fonction perceptron
-def perceptron(x, w, b):
-    s = np.dot(w, x) + b
-    return activation(s)
+def predict_single(x):
+    z1 = np.dot(W1, x) + b1
+    a1 = sigmoid(z1)
+    z2 = np.dot(W2, a1) + b2
+    a2 = sigmoid(z2)
+    return a2
 
 # Entraînement
 for epoch in range(epochs):
-    for i in range(len(X)):
-        x_i = X[i]
-        y_i = y[i]
-        pred = perceptron(x_i, w, b)
-        error = y_i - pred
-        w += learn_rate * error * x_i
-        b += learn_rate * error
+    for i in range(len(X_norm)):
+        x = X_norm[i].reshape(-1,1)
+        y_true = y[i]
+
+        z1 = np.dot(W1, x) + b1
+        a1 = sigmoid(z1)
+        z2 = np.dot(W2, a1) + b2
+        a2 = sigmoid(z2)
+
+        error = a2 - y_true
+
+        dz2 = error * a2 * (1 - a2)
+        dW2 = np.dot(dz2, a1.T)
+        db2 = dz2
+
+        dz1 = np.dot(W2.T, dz2) * a1 * (1 - a1)
+        dW1 = np.dot(dz1, x.T)
+        db1 = dz1
+
+        # Mise à jour des poids et biais
+        W2 -= learning_rate * dW2
+        b2 -= learning_rate * db2
+        W1 -= learning_rate * dW1
+        b1 -= learning_rate * db1
+
+correct = 0
+for i in range(len(X_norm)):
+    x = X_norm[i].reshape(-1,1)
+    a2 = predict_single(x)
+    pred = 1 if a2 >= 0.5 else 0
+    if pred == y[i]:
+        correct += 1
+accuracy = correct / len(X_norm)
+print(f"\nAccuracy sur l'ensemble d'entraînement : {accuracy*100:.2f}%")
+
 
 descriptions = {
     "Gender": "Genre (0 = Femme, 1 = Homme)",
@@ -68,15 +105,20 @@ def demander_float(nom):
         except ValueError:
             print("Entrée invalide. Veuillez entrer un nombre.")
 
-# Demander les données utilisateur
+def predict_new(x):
+    x = np.array(x, dtype=float)
+    x_norm = (x - X_min) / (X_max - X_min + 1e-8)
+    x_norm = x_norm.reshape(-1,1)
+    a2 = predict_single(x_norm)
+    return 1 if a2 >= 0.5 else 0
+
 print("\n--- Veuillez entrer les caractéristiques suivantes ---")
 nouvel_exemple = []
 for feature in features:
     val = demander_float(feature)
     nouvel_exemple.append(val)
 
-nouvel_exemple = np.array(nouvel_exemple, dtype=float)
-prediction = perceptron(nouvel_exemple, w, b)
+prediction = predict_new(nouvel_exemple)
 
 print("\nRésultat de la classification :")
 if prediction == 1:
